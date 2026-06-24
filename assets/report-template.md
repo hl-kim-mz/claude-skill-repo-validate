@@ -77,6 +77,8 @@ $ <명령>
 exit: <code>
 ```
 
+> exit≠0은 **real failure** / **검증불가(blocked, 환경 시그니처)** 로 구분 표기한다. 위험 명령(`deploy`/`migrate`/`publish`/`push`/`seed` 등)은 `--interview` 미사용 시 "미실행(opt-in 필요)"으로 기록한다.
+
 **테스트 충분성**: `<핵심 기능 커버 여부 / 커버리지 수치 / 형식적 테스트 여부>`
 
 **성공지표 / DoD 매핑**
