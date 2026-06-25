@@ -1,15 +1,26 @@
 ---
 name: repo-validate
-description: 현재 repo를 먼저 **타입 분류**(spec-data/library/service-app/cli/monorepo/docs)한 뒤, 그 타입에 맞는 검증 축으로 증거 기반 타당성 검증을 수행하고 Markdown 리포트를 생성한다. `--interview` 시 위험 명령 실행 여부와 A1 의도 모호점을 1회 배치 질의로 확정한다. Use when 사용자가 "검증", "타당성 검증", "repo 검증", "validity check", "validate repo"를 요청할 때.
-argument-hint: "[검증 대상 경로(기본 .)] [--interview]"
-allowed-tools: Read Glob Grep Bash Write AskUserQuestion
+description: 현재 repo를 먼저 **타입 분류**(spec-data/library/service-app/cli/monorepo/docs)한 뒤, 그 타입에 맞는 검증 축으로 증거 기반 타당성 검증을 수행하고 Markdown 리포트를 생성한다. `--diff`로 변경분(PR-게이트) 한정 검증, `--intent`로 A1 기획의도 baseline을 레포 바깥(다른 레포/Jira/Confluence)에서 가져온다. `--interview` 시 위험 명령 실행 여부와 A1 의도 모호점을 1회 배치 질의로 확정한다. Use when 사용자가 "검증", "타당성 검증", "repo 검증", "PR 검증", "변경분 검증", "validity check", "validate repo"를 요청할 때.
+argument-hint: "[검증 대상 경로(기본 .)] [--diff [base-ref]] [--intent <source>] [--interview]"
+allowed-tools: Read Glob Grep Bash Write AskUserQuestion ToolSearch WebFetch mcp__claude_ai_Atlassian__getJiraIssue mcp__claude_ai_Atlassian__searchJiraIssuesUsingJql mcp__claude_ai_Atlassian__getConfluencePage mcp__claude_ai_Atlassian__getConfluencePageDescendants mcp__atlassian__jira_get_issue mcp__atlassian__jira_search
 ---
 
 # Repo Validity Check (Type-Aware)
 
 현재 repo가 (1) 기획의도대로 구현됐는지, (2) AI가 잘 읽을 수 있게 구조화됐는지, (3) goal 검증이 완료됐는지를 **증거 기반(evidence-based)** 으로 검증한다. 단, 검증 축은 고정이 아니라 **repo 타입에 따라 활성화되는 축이 달라진다** — 스키마 repo에 운영 준비성을 묻거나, 라이브러리에 데이터 drift를 묻는 식의 잘못된 기준 적용을 막는다. 분석은 read-only이며, 테스트/validator를 실제로 실행한다. repo 소스는 수정하지 않고 **리포트는 대상 repo 바깥 또는 화면 출력**으로 만든다(P3 — 자기 산출물이 대상 repo의 git 위생 검사를 오염시키지 않도록).
 
-검증 대상 경로: `$ARGUMENTS`에서 `--interview` 플래그를 뺀 첫 인자 (없으면 현재 디렉토리 `.`). `--interview`가 있으면 **위험 명령 실행 여부**(Phase 0)와 **A1 의도 모호점**(Phase 2)에 대해 각각 1회 배치 질의를 수행한다. 한 모델로 통합: "혼자 안전하게 못 정하는 건 사용자에게 묻는다".
+검증 대상 경로: `$ARGUMENTS`에서 플래그(`--diff`/`--intent`/`--interview`)와 그 값을 뺀 첫 인자 (없으면 현재 디렉토리 `.`). `--interview`가 있으면 **위험 명령 실행 여부**(Phase 0)와 **A1 의도 모호점**(Phase 2)에 대해 각각 1회 배치 질의를 수행한다. 한 모델로 통합: "혼자 안전하게 못 정하는 건 사용자에게 묻는다".
+
+**플래그**(서로 직교, 조합 가능 — 대표 PR-게이트 호출: `repo-validate . --diff --intent BIZ-123`):
+
+- `--diff [base-ref]` — **PR-게이트 모드**. 검증 대상을 전체 repo가 아니라 **변경분(changeset)** 으로 한정한다. `base-ref` 생략 시 기본 브랜치를 자동 탐지한다(`git symbolic-ref --short refs/remotes/origin/HEAD` → 실패 시 `main`/`master` 존재 확인). changeset 산정·축별 스코핑은 **Phase 0.5** 참조. 플래그가 없으면 기존 전체 스캔 동작(하위호환).
+- `--intent <source>` — A1 기획의도 **baseline을 레포 바깥**에서 가져온다. `source` 형태에 따라 해석한다:
+  - **경로**(FS에 존재하는 파일/디렉토리 — 다른 레포 포함) → 해당 문서를 Read 해 baseline으로 채택.
+  - **Jira 키**(`[A-Z]+-\d+` 패턴, 이슈/에픽) → MCP로 fetch. 에픽이면 자식 이슈를 JQL(`parent=KEY` 또는 `"Epic Link"=KEY`)로 추가 수집.
+  - **Confluence URL/pageId** → MCP로 페이지 fetch(스페이스 트리면 descendants 포함).
+  - 도구 탐색은 **ToolSearch**로 수행한다(MCP 서버 네이밍이 환경마다 다름 — `mcp__claude_ai_Atlassian__getJiraIssue` 또는 `mcp__atlassian__jira_get_issue` 등). Confluence URL은 MCP 부재 시 `WebFetch`로 대체 시도.
+  - **MCP/페치 불가**(헤드리스·미인증·네트워크 차단) → 추측하지 말고 사용자에게 **의도 텍스트 붙여넣기** 또는 **로컬 export 경로**를 1회 요청(graceful fallback).
+  - 채택한 소스와 fetch 방법을 리포트 헤더 `기준 문서` 칸에 `jira:KEY` / `confluence:ID` / `ext-repo:<path>` / `pasted` 형태로 기록.
 
 타입 정의·축 활성화 매트릭스는 [references/repo-types.md](references/repo-types.md), 채점·게이팅은 [references/rubric.md](references/rubric.md), 리포트 형식은 [assets/report-template.md](assets/report-template.md)를 따른다.
 
@@ -25,11 +36,33 @@ allowed-tools: Read Glob Grep Bash Write AskUserQuestion
 ### Phase 0 — 입력 탐색 (기준선 확보)
 
 0. **git 상태를 먼저 캡처**: 어떤 리포트 산출물을 만들기 전에 `git status`를 캡처해 둔다(M-CHANGE 증거로 재사용). 이후 생성하는 리포트 파일은 이 캡처에 포함되지 않으므로 자기 산출물이 미커밋 변경으로 잡히지 않는다.
-1. **기획의도 문서**(intent baseline) 후보를 탐색: `docs/pr-faq*`, `docs/**`, `**/PRD*`, `**/prd*`, `**/spec*`, `AGENTS.md`, `README.md`, `CLAUDE.md`. 범위·목표·성공지표·제약을 담은 문서를 기준선으로 채택한다. (없으면 rubric.md의 fallback 모드.)
+1. **기획의도 문서**(intent baseline) 후보를 채택한다. 해석 순서:
+   - `--intent <source>`가 있으면 **외부 소스를 먼저 해석**(인자 설명의 source 규칙대로: 경로/Jira/Confluence, 불가 시 붙여넣기 fallback)해 baseline으로 삼는다. in-repo 탐색을 대체한다.
+   - 없으면 in-repo 탐색: `docs/pr-faq*`, `docs/**`, `**/PRD*`, `**/prd*`, `**/spec*`, `AGENTS.md`, `README.md`, `CLAUDE.md`. 범위·목표·성공지표·제약을 담은 문서를 기준선으로 채택한다.
+   - 외부·in-repo 모두 없으면 rubric.md의 fallback 모드(README/AGENTS.md baseline + 부재 Major).
+   - 채택한 baseline 소스를 `in-repo:<path>` / `jira:KEY` / `confluence:ID` / `ext-repo:<path>` / `pasted` 형태로 리포트 헤더에 기록한다.
 2. **검증 명령** 탐색 + **위험도 분류**: `package.json`의 scripts(`test`/`validate`/`lint`/`build`), `Makefile`, `.github/workflows/*`에서 실행 가능한 명령을 모은다. 각 명령을 **안전**(test/lint/validate/build 등 read-only류)과 **위험**(`deploy`/`migrate`/`publish`/`push`/`seed` 등 외부 부수효과·과금·DB 쓰기 가능)으로 분류한다.
    - **위험 명령**: 기본은 **미실행**(리포트에 "위험 명령 — 미실행, opt-in 필요"로 기록). `--interview` 시 위험 명령을 **1회 배치 질의**(AskUserQuestion)로 묶어 각각 [실행 / 건너뛰기 / 수정] 선택받고, 수정하면 사용자가 고친 명령으로 실행한다.
    - **안전 명령**: **타임아웃을 걸고** 실행한다(무한 대기·행 방지).
 3. 채택한 기준 문서 경로와 명령 목록(위험도 분류 포함)을 리포트 헤더에 기록한다.
+
+### Phase 0.5 — Diff 스코핑 (`--diff`일 때만)
+
+`--diff`가 없으면 이 Phase를 통째로 건너뛴다(전체 스캔 = 기존 동작). 있으면 **changeset을 먼저 확정**해 이후 Phase를 그 범위로 좁힌다.
+
+1. **기본 브랜치 탐지 → merge-base → changeset 산정**:
+   - `base-ref` 인자가 있으면 그것을, 없으면 자동 탐지(`git symbolic-ref --short refs/remotes/origin/HEAD`, 실패 시 `main`/`master`)한 기본 브랜치를 base로 쓴다.
+   - `git merge-base HEAD <base>`로 분기점을 구하고 `git diff --name-only <merge-base>..HEAD`로 **커밋된 브랜치 작업**을 changeset 파일 목록으로 채택한다. (PR에 실제로 들어갈 변경분.)
+   - changeset이 비어 있으면(브랜치=base) 그 사실을 리포트에 명시하고 사용자에게 base-ref 확인을 권고한 뒤, 전체 스캔으로 강등하지 말고 "변경분 없음 → 검증 대상 없음"으로 종료한다.
+   - changeset(파일 목록 + base-ref + `<merge-base>..HEAD` 범위)을 리포트 헤더에 기록한다.
+2. **축별 스코프 모디파이어**(타입 분류와 직교 — Phase 1의 활성 축 집합 위에 추가 적용):
+   - **A1**: changeset이 건드린 기능/화면만 baseline 의도에 매핑(전체 의도가 아니라 의도의 해당 slice). 미변경 기능의 미구현은 이 모드에서 발견사항으로 올리지 않는다.
+   - **A2**: changeset에 포함된 파일의 구조·문서 영향만 평가한다. 전체 repo 구조로 FAIL을 내지 않는다.
+   - **A3**: 러너가 관련 테스트 필터를 지원하면 그것을 쓴다(`vitest related`, `jest --findRelatedTests <files>`, `pytest <paths>`). 미지원이면 전체 실행하되 **diff를 커버하는 테스트가 무엇인지** 명시한다.
+   - **M-SEC**: 전체 트리가 아니라 **diff 추가 라인**을 스캔한다(`git diff <merge-base>..HEAD` 내용 대상; 마스킹 규칙은 동일).
+   - **M-CHANGE**: PR-게이트 관점에서 changeset의 정합(생성물+소스가 함께 변경됐는지, 잔여 미커밋이 없는지)을 본다.
+   - **M-DATA / M-DEP / M-OPS / M-API**: 해당 신호 파일(스키마 / lockfile·매니페스트 / Dockerfile·config / 공개 API)이 **changeset에 포함될 때만** 활성. 아니면 `diff 스코프 비활성(전체 스캔 모드에서 검증)`으로 표기 — fail 아님.
+3. 게이팅 규칙(Phase 4) 자체는 동일하나, **스코프된 발견사항에만** 적용한다.
 
 ### Phase 1 — Repo 타입 분류 + 활성 축 결정 (게이팅 전제)
 

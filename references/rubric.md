@@ -129,4 +129,17 @@
 
 ## Fallback (기획 문서 부재 시)
 
-기준 문서를 못 찾으면 A1은 README/AGENTS.md에 적힌 목표·기능 진술을 baseline으로 대체하고, baseline 부재 자체를 Major로 기록한다. 다른 활성 축은 그대로 적용한다.
+baseline 채택 순서: **① `--intent` 외부 소스(경로/Jira/Confluence) → ② 붙여넣기 → ③ in-repo 문서 → ④ README/AGENTS.md fallback**.
+
+- ①~③으로 baseline을 확보하면 **정상 baseline으로 채점**한다(외부 소스라는 이유로 감점하지 않음 — Major 아님).
+- 위 모두 실패해 ④로 떨어질 때만 A1을 README/AGENTS.md의 목표·기능 진술로 대체하고 **baseline 부재 자체를 Major**로 기록한다. 다른 활성 축은 그대로 적용한다.
+- `--intent`를 줬으나 fetch가 막혀(MCP 부재·네트워크) 붙여넣기도 못 받은 경우: baseline `검증불가(blocked)`로 기록하고 A1 상한을 concern으로 둔다(미검증을 pass로 위장하지 않음).
+
+## Diff 모드 채점 (`--diff`)
+
+diff 모드에서는 활성 축을 **changeset 슬라이스**에 적용한다(SKILL.md Phase 0.5).
+
+- **축①**: 범위 추적성 분모를 *changeset이 건드린* 기능/범위 항목으로 한정한다. 미변경 기능의 미구현은 발견사항으로 올리지 않는다.
+- **축③**: 테스트 충분성은 *diff를 커버하는* 테스트 기준으로 평가한다(관련 테스트 필터 사용 가능 시 그 결과, 아니면 전체 실행 후 커버 범위 명시).
+- **조건부 모듈**: 신호 파일이 changeset에 없으면 채점 제외(`diff 스코프 비활성`) — 전체 스캔 모드 검증으로 위임하며 fail로 치지 않는다.
+- 게이팅(FAIL/CONCERNS/PASS) 규칙은 동일하되 스코프된 발견사항에만 적용한다.

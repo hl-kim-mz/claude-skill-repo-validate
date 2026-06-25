@@ -2,8 +2,9 @@
 
 - **검증 대상**: `<repo 경로>`
 - **검증일**: `<YYYY-MM-DD>`
+- **검증 스코프**: `full` | `diff` (`<diff면: base=<ref>, range=<merge-base>..HEAD, <N> files>`)
 - **Repo 타입**: **`<primary>`** (secondary: `<...>`) — 분류 근거: `<매칭 파일/패턴>`
-- **기준 문서(intent baseline)**: `<채택한 문서 경로>`
+- **기준 문서(intent baseline)**: `<in-repo:<path> | jira:KEY | confluence:ID | ext-repo:<path> | pasted>`
 - **실행한 검증 명령**: `<명령 목록>`
 - **종합 판정**: **`<PASS | CONCERNS | FAIL>`** — `<한 줄 근거>`
 
@@ -23,6 +24,14 @@
 | M-PERF 성능 특성 | `<✅/N/A>` | | |
 
 > N/A 축은 타입상 비활성 — 채점·판정에서 제외됨.
+
+<!-- diff 모드일 때만: 검증한 changeset 파일 목록 -->
+<!--
+**검증한 변경분 (changeset, `<merge-base>..HEAD`)**
+- `<path/to/changed/file>`
+- … (신호 파일 미포함 조건부 모듈은 `diff 스코프 비활성`으로 표기)
+-->
+
 
 ---
 
